@@ -1,0 +1,127 @@
+<?php
+
+
+/**
+ * Implements hook_block_info().
+ */
+function nysm_customizations_block_info() {
+  $blocks['calendar-picker'] = array(
+    'info' => t('NYSM Calendar DatePicker'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  $blocks['calendar-date-browser'] = array(
+    'info' => t('NYSM DatePicker Details'),
+    'cache' => DRUPAL_NO_CACHE,
+  );
+  return $blocks;
+}
+
+/**
+ * Implements hook_block_view().
+ */
+function nysm_customizations_block_view($delta = '') {
+  $block = array();
+  switch ($delta) {
+    case 'calendar-picker':
+      // Add extra libraries
+      drupal_add_library('system', 'ui.datepicker');
+      drupal_add_js(drupal_get_path('module', 'nysm_customizations') .'/nysm_customizations.js');
+      drupal_add_css(drupal_get_path('module', 'date_popup')  .'/themes/datepicker.1.7.css');
+      drupal_add_css(drupal_get_path('module', 'nysm_customizations'). '/nysm_customizations.css');
+      
+      // Add the customized settings
+      $calendar_uri = url('programs', array('absolute' => TRUE));
+      $date = date('Y-m-d');
+      $month = date('Y-m');
+      $month_view_url = url("programs/$month");
+      $view = views_get_page_view();
+      if (!empty($view) && $view->name == 'programs' && isset($view->args[0])) {
+        $date = date($view->args[0]);
+      }
+      $date = new DateObject($date);
+      drupal_add_js(array('nysm_event_base_uri' => $calendar_uri, 'nysm_event_dates' => _nysm_customizations_retrieve_event_dates()), 'setting');
+      drupal_add_js(array('nysm_event_default_date' => date_format_date($date, 'custom', 'm/d/Y')), 'setting');
+      
+      $block['subject'] = t('Calendar');
+      $block['content'] = "<div id='nysm-event-nojs'><a href=\"$calendar_uri\">Events this week</a> will be a link. You must have javascript enabled in order to use the date picker.<div><a id='nysm-datepicker-month-view' href='$month_view_url'>Current Month view</a></div></div><div id='nysm-datepicker'></div><div id='nysm-datepicker-details'><div class='loading'></div><div class='content'></div></div><div id='nysm-datepicker-footer'></div>";
+      break;
+      
+    case 'calendar-date-browser':
+      $views_page = views_get_page_view();
+      if ($views_page && 'programs' == $views_page->name) {
+        $date = arg(1);
+        $date = isset($date) ? $date : date('Y-m-d');
+        $block['subject'] = t('Date Browser');
+        if (strlen($date) > 7) {
+          $block['content'] = _nysm_customizations_views_post_week_build($date);
+        }
+        else {
+          $block['content'] = _nysm_customizations_views_post_month_build($date);
+        }
+      }
+      break;
+  }
+  return $block;
+}
+
+
+/**
+ * Get a week range based on the date.
+ * @param date a date in the format 'Y-m-d'
+ */
+function _nysm_customizations_get_date_month_range($date = NULL) {
+  static $date_range;
+  if (!isset($date_range)) {
+    $date_range = array();
+  }
+  if (!isset($date)) {
+    $date = date('Y-m-d');
+  }
+  if (!isset($date_range[$date])) {
+    $date_object = new DateObject($date);
+    $temp_date_range = array();
+    $temp_date_range[] = $date_object;
+    $temp_date_range[] = _nysm_customizations_date_add_interval($temp_date_range[0], ' + 1 month - 1 day');
+    $date_range[$date] = $temp_date_range;
+  }
+  
+  return $date_range[$date];
+}
+
+/**
+ * Retrieve a list of dates.
+ */
+function _nysm_customizations_retrieve_event_dates() {
+  static $dates;
+
+  if (!isset($dates)){
+    $dates = array();
+    $cached_dates = cache_get('nysm_customizations_event_dates');
+    if (!empty($cached_dates)) {
+      $dates = $cached_dates->data;
+    }
+    else {
+      $default_timezone = new DateTimeZone(date_default_timezone(FALSE));
+      
+      $field_info = field_info_field('field_event_date');
+      $table_info = $field_info['storage']['details']['sql']['FIELD_LOAD_CURRENT'];
+      foreach ($table_info as $key => $values) {
+        $table_name = $key;
+        $table_column = $values['value'];
+      }
+      
+      $results = db_query("SELECT field_event_date_value FROM field_data_field_event_date WHERE entity_type = 'node' AND bundle = 'event' ORDER BY $table_column ASC");
+      foreach ($results as $result) {
+        $date_object = new DateObject($result->$table_column, 'UTC');
+        $date_object->setTimezone($default_timezone);
+        $year = date_format($date_object, 'Y');
+        $month = date_format($date_object, 'm');
+        $day = date_format($date_object, 'd');
+        $dates[$year][$month][$day] = $day;
+      }
+      cache_set('nysm_customizations_event_dates', $dates, 'cache', CACHE_TEMPORARY);
+    }
+  }
+  return $dates;
+}
+

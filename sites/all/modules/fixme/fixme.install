@@ -1,0 +1,29 @@
+<?php
+/**
+ * Rescue content types that might disappear with 7.36.
+ */
+function tta_custom_update_7005() {
+  // Spin through the node_type table.
+  // This is only good where we don't have deleted node type modules or features.
+  $ret = '';
+  $result = db_query("SELECT type, name, module FROM {node_type} WHERE module <> 'museum'");
+
+  foreach ($result as $row) {
+    if (!module_exists($row->module)) {
+      $x = db_update('node_type')
+        ->fields(array(
+          'module' => 'node',   // Give it back to the Node module.
+          'custom' => 1,
+          'modified' => 1,
+          'locked' => 0,
+          'disabled' => 0,
+          ))
+        ->condition('type', $row->type)
+        ->execute();
+      $ret .= '<p>' . check_plain("$row->name content type rescued from the missing '$row->module' module.") . '</p>';
+    }
+  }
+
+  return $ret;
+}
+?>

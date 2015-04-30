@@ -1,0 +1,19 @@
+<?php
+
+function profile_title_menu_alter(&$items) {
+  $items['user/%user']['title callback'] = 'profile_title_user_menu_title';
+}
+function profile_title_user_menu_title() {
+   if (arg(0) == 'user') {
+        // Load uid from url
+        $user = user_load(arg(1));
+        // Get the full user name somehow; here, I'm calling a function of my own.
+        $output = $user->field_displayed_name['und'][0]['safe_value'];
+    }
+    // Fallback to username if no fields are present
+    if (empty($output)) {
+        $output = $user->name;
+    }
+    return $output;
+}
+?>

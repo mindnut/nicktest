@@ -1,0 +1,5 @@
+name = fixme
+description = fixes content types
+package = Fix
+core = 7.x
+files[] = fixme.install
